@@ -154,12 +154,12 @@ extern "C" void decoderInput(long long frameIndex);
 extern "C" void decoderOutput(long long frameIndex);
 
 extern "C" OnCreateResult onCreate(void *env, void *activity, void *assetManager);
-extern "C" void destroyNative(void *env);
+extern "C" void destroyNative();
 extern "C" void renderNative(long long renderedFrameIndex);
 extern "C" void updateLoadingTexuture(const unsigned char *data);
 extern "C" void renderLoadingNative();
 extern "C" void onTrackingNative(bool clientsidePrediction);
-extern "C" OnResumeResult onResumeNative(void *surface, bool darkMode);
+extern "C" OnResumeResult onResumeNative(bool darkMode);
 extern "C" void setStreamConfig(StreamConfig config);
 extern "C" void onStreamStartNative();
 extern "C" void onPauseNative();
@@ -175,6 +175,19 @@ extern "C" void legacyReceive(const unsigned char *packet, unsigned int packetSi
 extern "C" void sendTimeSync();
 extern "C" unsigned char isConnectedNative();
 extern "C" void closeSocket();
+
+extern "C" void entryPointNative(void *v_env, void *v_context);
+extern "C" void lifecycleEventNative(int event);
+extern "C" void setScreenSurface(void *v_env, void *v_surface);
+extern "C" void setFramerate(float fps);
+
+extern "C" void (*alvrInitialize)(void *v_env, void *v_context);
+extern "C" void (*alvrResume)();
+extern "C" void (*alvrStreamStart)();
+extern "C" void (*alvrRenderLobby)();
+extern "C" void (*alvrRenderStream)();
+extern "C" void (*alvrPause)();
+extern "C" void (*alvrDestroy)();
 
 extern "C" void (*inputSend)(TrackingInfo data);
 extern "C" void (*timeSyncSend)(TimeSync data);

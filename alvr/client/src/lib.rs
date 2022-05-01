@@ -2,6 +2,7 @@
 
 mod connection;
 mod connection_utils;
+mod decoder;
 mod logging_backend;
 mod storage;
 
@@ -20,11 +21,12 @@ use alvr_common::{
     prelude::*,
     ALVR_VERSION, HEAD_ID, LEFT_HAND_ID, RIGHT_HAND_ID,
 };
-use alvr_session::Fov;
+use alvr_session::{CodecType, Fov};
 use alvr_sockets::{
     BatteryPacket, HeadsetInfoPacket, Input, LegacyController, LegacyInput, MotionData,
     TimeSyncPacket, ViewsConfig,
 };
+use decoder::{CODEC, DECODER_REF, REALTIME_DECODER};
 use jni::{
     objects::{GlobalRef, JClass, JObject, JString, ReleaseMode},
     sys::{jboolean, jobject},
@@ -43,13 +45,9 @@ use std::{
 };
 use tokio::{runtime::Runtime, sync::mpsc, sync::Notify};
 
-// This is the actual storage for the context pointer set in ndk-context. usually stored in
-// ndk-glue instead
-static GLOBAL_CONTEXT: OnceCell<GlobalRef> = OnceCell::new();
-static DECODER_REF: Lazy<Mutex<Option<GlobalRef>>> = Lazy::new(|| Mutex::new(None));
+use crate::decoder::STREAM_TEAXTURE_HANDLE;
 
 static RUNTIME: Lazy<Mutex<Option<Runtime>>> = Lazy::new(|| Mutex::new(None));
-static IDR_PARSED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
 static INPUT_SENDER: Lazy<Mutex<Option<mpsc::UnboundedSender<Input>>>> =
     Lazy::new(|| Mutex::new(None));
 static TIME_SYNC_SENDER: Lazy<Mutex<Option<mpsc::UnboundedSender<TimeSyncPacket>>>> =
@@ -60,227 +58,7 @@ static VIEWS_CONFIG_SENDER: Lazy<Mutex<Option<mpsc::UnboundedSender<ViewsConfig>
     Lazy::new(|| Mutex::new(None));
 static BATTERY_SENDER: Lazy<Mutex<Option<mpsc::UnboundedSender<BatteryPacket>>>> =
     Lazy::new(|| Mutex::new(None));
-static IDR_REQUEST_NOTIFIER: Lazy<Notify> = Lazy::new(Notify::new);
 static ON_PAUSE_NOTIFIER: Lazy<Notify> = Lazy::new(Notify::new);
-
-static STREAM_TEAXTURE_HANDLE: Lazy<Mutex<i32>> = Lazy::new(|| Mutex::new(0));
-
-#[no_mangle]
-pub extern "system" fn Java_com_polygraphene_alvr_OvrActivity_initializeNative(
-    env: JNIEnv,
-    context: JObject,
-) {
-    GLOBAL_CONTEXT
-        .set(env.new_global_ref(context).unwrap())
-        .map_err(|_| ())
-        .unwrap();
-
-    alvr_initialize(
-        env.get_java_vm().unwrap(),
-        GLOBAL_CONTEXT.get().unwrap().as_obj(),
-    );
-
-    // todo: manage loading and stream textures on lib side
-    alvr_common::show_err(|| -> StrResult {
-        let android_context = ndk_context::android_context();
-
-        let vm = unsafe { jni::JavaVM::from_raw(android_context.vm().cast()).unwrap() };
-        let env = vm.attach_current_thread().unwrap();
-
-        let asset_manager = env
-            .call_method(
-                android_context.context().cast(),
-                "getAssets",
-                "()Landroid/content/res/AssetManager;",
-                &[],
-            )
-            .unwrap()
-            .l()
-            .unwrap();
-
-        let result = unsafe {
-            onCreate(
-                env.get_native_interface() as _,
-                *context as _,
-                *asset_manager as _,
-            )
-        };
-
-        *STREAM_TEAXTURE_HANDLE.lock() = result.streamSurfaceHandle;
-
-        Ok(())
-    }());
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_DecoderThread_DecoderInput(
-    _: JNIEnv,
-    _: JObject,
-    frame_index: i64,
-) {
-    decoderInput(frame_index);
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_DecoderThread_DecoderOutput(
-    _: JNIEnv,
-    _: JObject,
-    frame_index: i64,
-) {
-    decoderOutput(frame_index);
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_DecoderThread_setWaitingNextIDR(
-    _: JNIEnv,
-    _: JObject,
-    waiting: bool,
-) {
-    IDR_PARSED.store(!waiting, Ordering::Relaxed);
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_destroyNative(
-    env: JNIEnv,
-    _: JObject,
-) {
-    destroyNative(env.get_native_interface() as _)
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_renderNative(
-    _: JNIEnv,
-    _: JObject,
-) {
-    let rendered_frame_index = if let Some(decoder) = &*DECODER_REF.lock() {
-        let vm = JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap();
-        let env = vm.get_env().unwrap();
-
-        env.call_method(decoder.as_obj(), "clearAvailable", "()J", &[])
-            .unwrap()
-            .j()
-            .unwrap()
-    } else {
-        -1
-    };
-
-    if rendered_frame_index != -1 {
-        renderNative(rendered_frame_index);
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_renderLoadingNative(
-    _: JNIEnv,
-    _: JObject,
-) {
-    renderLoadingNative()
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_onResumeNative(
-    _: JNIEnv,
-    _: JObject,
-    jscreen_surface: JObject,
-    decoder: JObject,
-) {
-    alvr_common::show_err(|| -> StrResult {
-        let vm = JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap();
-        let env = vm.get_env().unwrap();
-
-        // let decoder_class = env
-        //     .find_class("com/polygraphene/alvr/DecoderThread")
-        //     .unwrap();
-        // let handle = *STREAM_TEAXTURE_HANDLE.lock();
-        // let decoder = env
-        //     .new_object(decoder_class, "(I)V", &[handle.into()])
-        //     .unwrap();
-        *DECODER_REF.lock() = Some(env.new_global_ref(decoder).map_err(err!())?);
-
-        let config = storage::load_config();
-
-        let result = onResumeNative(*jscreen_surface as _, config.dark_mode);
-
-        let device_name = if result.deviceType == DeviceType_OCULUS_GO {
-            "Oculus Go"
-        } else if result.deviceType == DeviceType_OCULUS_QUEST {
-            "Oculus Quest"
-        } else if result.deviceType == DeviceType_OCULUS_QUEST_2 {
-            "Oculus Quest 2"
-        } else {
-            "Unknown device"
-        };
-
-        let available_refresh_rates =
-            slice::from_raw_parts(result.refreshRates, result.refreshRatesCount as _).to_vec();
-        let preferred_refresh_rate = available_refresh_rates.last().cloned().unwrap_or(60_f32);
-
-        let headset_info = HeadsetInfoPacket {
-            recommended_eye_width: result.recommendedEyeWidth as _,
-            recommended_eye_height: result.recommendedEyeHeight as _,
-            available_refresh_rates,
-            preferred_refresh_rate,
-            reserved: format!("{}", *ALVR_VERSION),
-        };
-
-        let runtime = Runtime::new().map_err(err!())?;
-
-        runtime.spawn(async move {
-            let connection_loop =
-                connection::connection_lifecycle_loop(headset_info, device_name, &config.hostname);
-
-            tokio::select! {
-                _ = connection_loop => (),
-                _ = ON_PAUSE_NOTIFIER.notified() => ()
-            };
-        });
-
-        *RUNTIME.lock() = Some(runtime);
-
-        Ok(())
-    }());
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_onStreamStartNative(
-    _: JNIEnv,
-    _: JObject,
-    codec: i32,
-    real_time: jboolean,
-) {
-    onStreamStartNative();
-
-    let vm = JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap();
-    let env = vm.get_env().unwrap();
-
-    if let Some(decoder) = &*DECODER_REF.lock() {
-        env.call_method(
-            decoder.as_obj(),
-            "onConnect",
-            "(IZ)V",
-            &[codec.into(), real_time.into()],
-        )
-        .unwrap();
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_onPauseNative(
-    env: JNIEnv,
-    _: JObject,
-) {
-    ON_PAUSE_NOTIFIER.notify_waiters();
-
-    // shutdown and wait for tasks to finish
-    drop(RUNTIME.lock().take());
-
-    onPauseNative();
-
-    if let Some(decoder) = DECODER_REF.lock().take() {
-        env.call_method(decoder.as_obj(), "stopAndWait", "()V", &[])
-            .unwrap();
-    }
-}
 
 #[no_mangle]
 pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_onBatteryChangedNative(
@@ -291,43 +69,6 @@ pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_onBatteryCh
 ) {
     onBatteryChangedNative(battery, plugged)
 }
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_isConnectedNative(
-    _: JNIEnv,
-    _: JObject,
-) -> u8 {
-    isConnectedNative()
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_DecoderThread_requestIDR(
-    _: JNIEnv,
-    _: JObject,
-) {
-    IDR_REQUEST_NOTIFIER.notify_waiters();
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_DecoderThread_restartRenderCycle(
-    env: JNIEnv,
-    _: JObject,
-) {
-    let context = ndk_context::android_context().context();
-
-    env.call_method(context.cast(), "restartRenderCycle", "()V", &[])
-        .unwrap();
-}
-
-#[no_mangle]
-pub unsafe extern "system" fn Java_com_polygraphene_alvr_DecoderThread_getStreamTextureHandle(
-    env: JNIEnv,
-    _: JObject,
-) -> i32 {
-    *STREAM_TEAXTURE_HANDLE.lock()
-}
-
-// Rust Interface:
 
 // Note: Java VM and Android Context must be initialized with ndk-glue
 pub fn initialize() {
@@ -634,16 +375,239 @@ pub fn initialize() {
     }
 
     permission::try_get_microphone_permission();
+
+    let vm = unsafe { jni::JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap() };
+    let env = vm.attach_current_thread().unwrap();
+
+    let asset_manager = env
+        .call_method(
+            ndk_context::android_context().context().cast(),
+            "getAssets",
+            "()Landroid/content/res/AssetManager;",
+            &[],
+        )
+        .unwrap()
+        .l()
+        .unwrap();
+
+    let result = unsafe {
+        onCreate(
+            env.get_native_interface() as _,
+            ndk_context::android_context().context().cast(),
+            *asset_manager as _,
+        )
+    };
+
+    *STREAM_TEAXTURE_HANDLE.lock() = result.streamSurfaceHandle;
+}
+
+pub fn resume() {
+    let config = storage::load_config();
+
+    let result = unsafe { onResumeNative(config.dark_mode) };
+
+    let device_name = if result.deviceType == DeviceType_OCULUS_GO {
+        "Oculus Go"
+    } else if result.deviceType == DeviceType_OCULUS_QUEST {
+        "Oculus Quest"
+    } else if result.deviceType == DeviceType_OCULUS_QUEST_2 {
+        "Oculus Quest 2"
+    } else {
+        "Unknown device"
+    };
+
+    let available_refresh_rates = unsafe {
+        slice::from_raw_parts(result.refreshRates, result.refreshRatesCount as _).to_vec()
+    };
+    let preferred_refresh_rate = available_refresh_rates.last().cloned().unwrap_or(60_f32);
+
+    let headset_info = HeadsetInfoPacket {
+        recommended_eye_width: result.recommendedEyeWidth as _,
+        recommended_eye_height: result.recommendedEyeHeight as _,
+        available_refresh_rates,
+        preferred_refresh_rate,
+        reserved: format!("{}", *ALVR_VERSION),
+    };
+
+    let runtime = Runtime::new().unwrap();
+
+    runtime.spawn(async move {
+        let connection_loop =
+            connection::connection_lifecycle_loop(headset_info, device_name, &config.hostname);
+
+        tokio::select! {
+            _ = connection_loop => (),
+            _ = ON_PAUSE_NOTIFIER.notified() => ()
+        };
+    });
+
+    *RUNTIME.lock() = Some(runtime);
+}
+
+#[no_mangle]
+pub fn stream_start() {
+    unsafe { onStreamStartNative() };
+
+    let vm = unsafe { JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap() };
+    let env = vm.get_env().unwrap();
+
+    let codec_i32 = if matches!(*CODEC.lock(), CodecType::HEVC) {
+        1
+    } else {
+        0
+    };
+
+    if let Some(decoder) = &*DECODER_REF.lock() {
+        env.call_method(
+            decoder.as_obj(),
+            "onConnect",
+            "(IZ)V",
+            &[codec_i32.into(), (*REALTIME_DECODER.lock()).into()],
+        )
+        .unwrap();
+    }
+}
+
+pub fn render_lobby() {
+    unsafe { renderLoadingNative() };
+}
+
+pub fn render_stream() {
+    let rendered_frame_index = if let Some(decoder) = &*DECODER_REF.lock() {
+        let vm = unsafe { JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap() };
+        let env = vm.get_env().unwrap();
+
+        env.call_method(decoder.as_obj(), "clearAvailable", "()J", &[])
+            .unwrap()
+            .j()
+            .unwrap()
+    } else {
+        -1
+    };
+
+    if rendered_frame_index != -1 {
+        unsafe { renderNative(rendered_frame_index) };
+    }
+}
+
+pub fn pause() {
+    let vm = unsafe { JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap() };
+    let env = vm.get_env().unwrap();
+
+    ON_PAUSE_NOTIFIER.notify_waiters();
+
+    // shutdown and wait for tasks to finish
+    drop(RUNTIME.lock().take());
+
+    unsafe { onPauseNative() };
+
+    if let Some(decoder) = DECODER_REF.lock().take() {
+        env.call_method(decoder.as_obj(), "stopAndWait", "()V", &[])
+            .unwrap();
+    }
+}
+
+pub fn destroy() {
+    unsafe { destroyNative() };
 }
 
 // C interface:
 
 // NB: context must be thread safe.
 #[no_mangle]
-pub extern "C" fn alvr_initialize(vm: JavaVM, context: JObject) {
-    unsafe {
-        ndk_context::initialize_android_context(vm.get_java_vm_pointer().cast(), context.cast())
-    };
+pub extern "C" fn alvr_initialize(vm: *mut c_void, context: *mut c_void) {
+    unsafe { ndk_context::initialize_android_context(vm, context) };
 
     initialize();
+}
+
+#[no_mangle]
+pub extern "C" fn alvr_resume() {
+    resume();
+}
+
+#[no_mangle]
+pub extern "C" fn alvr_stream_start() {
+    stream_start();
+}
+
+#[no_mangle]
+pub extern "C" fn alvr_render_lobby() {
+    render_lobby();
+}
+
+#[no_mangle]
+pub extern "C" fn alvr_render_stream() {
+    render_stream();
+}
+
+#[no_mangle]
+pub extern "C" fn alvr_pause() {
+    pause();
+}
+
+pub extern "C" fn alvr_destroy() {
+    destroy();
+}
+
+// Wrapper interface (to be deleted):
+
+// This is the actual storage for the context pointer set in ndk-context. usually stored in
+// ndk-glue instead
+static GLOBAL_CONTEXT: OnceCell<GlobalRef> = OnceCell::new();
+
+#[no_mangle]
+pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_entryPointNative(
+    env: JNIEnv,
+    context: JObject,
+) {
+    alvrInitialize = Some(alvr_initialize);
+    alvrResume = Some(alvr_resume);
+    alvrStreamStart = Some(alvr_stream_start);
+    alvrRenderLobby = Some(alvr_render_lobby);
+    alvrRenderStream = Some(alvr_render_stream);
+    alvrPause = Some(alvr_pause);
+    alvrDestroy = Some(alvr_destroy);
+
+    GLOBAL_CONTEXT
+        .set(env.new_global_ref(context).unwrap())
+        .map_err(|_| ())
+        .unwrap();
+
+    entryPointNative(
+        env.get_java_vm().unwrap().get_java_vm_pointer().cast(),
+        GLOBAL_CONTEXT.get().unwrap().as_obj().cast(),
+    );
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_lifecycleEventNative(
+    _: JNIEnv,
+    _: JObject,
+    event: i32,
+) {
+    lifecycleEventNative(event);
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn Java_com_polygraphene_alvr_OvrActivity_onResumeNative(
+    _: JNIEnv,
+    _: JObject,
+    jscreen_surface: JObject,
+    decoder: JObject,
+) {
+    let vm = JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap();
+    let env = vm.get_env().unwrap();
+
+    // let decoder_class = env
+    //     .find_class("com/polygraphene/alvr/DecoderThread")
+    //     .unwrap();
+    // let handle = *STREAM_TEAXTURE_HANDLE.lock();
+    // let decoder = env
+    //     .new_object(decoder_class, "(I)V", &[handle.into()])
+    //     .unwrap();
+    *DECODER_REF.lock() = Some(env.new_global_ref(decoder).unwrap());
+
+    setScreenSurface(env.get_native_interface().cast(), jscreen_surface.cast());
+    lifecycleEventNative(1);
 }

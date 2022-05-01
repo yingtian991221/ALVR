@@ -28,6 +28,7 @@
 #include <inttypes.h>
 #include <glm/gtx/euler_angles.hpp>
 #include <mutex>
+#include <deque>
 
 using namespace std;
 using namespace gl_render_utils;
@@ -180,9 +181,7 @@ OnCreateResult onCreate(void *v_env, void *v_activity, void *v_assetManager) {
             (int) g_ctx.loadingTexture.get()->GetGLTexture()};
 }
 
-void destroyNative(void *v_env) {
-    auto *env = (JNIEnv *) v_env;
-
+void destroyNative() {
     LOG("Destroying EGL.");
 
     g_ctx.streamTexture.reset();
@@ -192,7 +191,7 @@ void destroyNative(void *v_env) {
 
     vrapi_Shutdown();
 
-    env->DeleteGlobalRef(g_ctx.java.ActivityObject);
+    // env->DeleteGlobalRef(g_ctx.java.ActivityObject);
 }
 
 uint64_t mapButtons(ovrInputTrackedRemoteCapabilities *remoteCapabilities,
@@ -575,10 +574,7 @@ void sendTrackingInfo(bool clientsidePrediction) {
     }
 }
 
-OnResumeResult onResumeNative(void *v_surface, bool darkMode) {
-    auto surface = (jobject) v_surface;
-
-    g_ctx.window = ANativeWindow_fromSurface(g_ctx.env, surface);
+OnResumeResult onResumeNative(bool darkMode) {
 
     LOGI("Entering VR mode.");
 
@@ -652,6 +648,7 @@ void setStreamConfig(StreamConfig config) {
 }
 
 void onStreamStartNative() {
+    LOGE("onStreamStartNative");
     ovrRenderer_Destroy(&g_ctx.Renderer);
     ovrRenderer_Create(&g_ctx.Renderer, g_ctx.streamConfig.eyeWidth, g_ctx.streamConfig.eyeHeight,
                        g_ctx.streamTexture.get(), g_ctx.loadingTexture->GetGLTexture(),
@@ -945,4 +942,102 @@ void onTrackingNative(bool clientsidePrediction) {
     if (g_ctx.Ovr != nullptr) {
         sendTrackingInfo(clientsidePrediction);
     }
+}
+
+
+void (*alvrInitialize)(void *v_env, void *v_context);
+void (*alvrResume)();
+void (*alvrStreamStart)();
+void (*alvrRenderLobby)();
+void (*alvrRenderStream)();
+void (*alvrPause)();
+void (*alvrDestroy)();
+
+namespace {
+    const int ON_RESUME_EVENT = 1;
+    const int ON_PAUSE_EVENT = 2;
+    const int ON_DESTROY_EVENT = 3;
+
+    int lifecycleEvent;
+    std::mutex lifecycleEventMutex;
+
+    float fps = 72;
+}
+
+void entryPointNative(void *v_env, void *v_context) {
+    auto *env = (JNIEnv *) v_env;
+    auto context = (jobject) v_context;
+
+    LOGE("NATIVE ENTRY POINT");
+
+    alvrInitialize(v_env, v_context);
+
+    bool resumed = false;
+    bool prev_frame_connected = false;
+
+    while (true) {
+        std::lock_guard<std::mutex> lock(lifecycleEventMutex);
+
+        if (lifecycleEvent == ON_RESUME_EVENT) {
+            LOGE("ON RESUME");
+            alvrResume();
+            resumed = true;
+        } else if (lifecycleEvent == ON_PAUSE_EVENT) {
+            LOGE("ON PAUSE");
+            alvrPause();
+            resumed = false;
+        } else if (lifecycleEvent == ON_DESTROY_EVENT) {
+            LOGE("ON DESTROY");
+            alvrDestroy();
+            return;                // exit point
+        }
+        // else: no event
+
+        lifecycleEvent = 0; // allow receiving new events
+
+        if (resumed) {
+            bool connected = isConnectedNative();
+            if (connected && !prev_frame_connected) {
+                alvrStreamStart();
+            }
+
+            prev_frame_connected = connected;
+
+            if (connected) {
+                alvrRenderStream();
+            } else {
+                alvrRenderLobby();
+            }
+            usleep(1000'000 / fps);
+        } else {
+            usleep(1000); // 1ms
+        }
+    }
+}
+
+
+void lifecycleEventNative(int event) {
+    LOGE("Received lifecycle event %d", event);
+
+
+    while (true) {
+        std::lock_guard<std::mutex> lock(lifecycleEventMutex);
+
+        // note: only one event is supported at a time. Wait for the last event to be consumed
+        // before setting the new one and returning
+        if (lifecycleEvent == 0) {
+            lifecycleEvent = event;
+
+            break;
+        }
+    }
+}
+
+void setScreenSurface(void *v_env, void *v_surface) {
+    g_ctx.window = ANativeWindow_fromSurface((JNIEnv *)v_env, (jobject)v_surface);
+    LOGE("setting surface %llu", g_ctx.window);
+}
+
+void setFramerate(float value) {
+    fps = value;
 }

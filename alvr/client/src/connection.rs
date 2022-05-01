@@ -2,7 +2,8 @@
 
 use crate::{
     connection_utils::{self, ConnectionError},
-    storage, TimeSync, VideoFrame, BATTERY_SENDER, DECODER_REF, INPUT_SENDER, TIME_SYNC_SENDER,
+    decoder::{CODEC, DECODER_REF, IDR_PARSED, IDR_REQUEST_NOTIFIER, REALTIME_DECODER},
+    storage, TimeSync, VideoFrame, BATTERY_SENDER, INPUT_SENDER, TIME_SYNC_SENDER,
     VIDEO_ERROR_REPORT_SENDER, VIEWS_CONFIG_SENDER,
 };
 use alvr_common::{glam::Vec2, prelude::*, ALVR_NAME, ALVR_VERSION};
@@ -14,7 +15,7 @@ use alvr_sockets::{
 };
 use futures::future::BoxFuture;
 use glyph_brush_layout::{
-    ab_glyph::{Font, FontArc, FontRef, ScaleFont},
+    ab_glyph::{Font, FontRef, ScaleFont},
     FontId, GlyphPositioner, HorizontalAlign, Layout, SectionGeometry, SectionText, VerticalAlign,
 };
 use jni::{
@@ -118,28 +119,6 @@ fn set_loading_message(hostname: &str, message: &str) {
     }
 
     unsafe { crate::updateLoadingTexuture(buffer.as_ptr()) };
-}
-
-fn on_server_connected(fps: f32, codec: CodecType, realtime_decoder: bool, dashboard_url: &str) {
-    let vm = unsafe { JavaVM::from_raw(ndk_context::android_context().vm().cast()).unwrap() };
-    let env = vm.attach_current_thread().unwrap();
-
-    let activity = ndk_context::android_context().context().cast();
-
-    let jdashboard_url = env.new_string(dashboard_url).unwrap();
-
-    env.call_method(
-        activity,
-        "onServerConnected",
-        "(FIZLjava/lang/String;)V",
-        &[
-            fps.into(),
-            (matches!(codec, CodecType::HEVC) as i32).into(),
-            realtime_decoder.into(),
-            jdashboard_url.into(),
-        ],
-    )
-    .unwrap();
 }
 
 async fn connection_pipeline(
@@ -338,12 +317,9 @@ async fn connection_pipeline(
         });
     }
 
-    on_server_connected(
-        config_packet.fps,
-        settings.video.codec,
-        settings.video.client_request_realtime_decoder,
-        &config_packet.dashboard_url,
-    );
+    unsafe { crate::setFramerate(config_packet.fps) };
+    *CODEC.lock() = settings.video.codec;
+    *REALTIME_DECODER.lock() = settings.video.client_request_realtime_decoder;
 
     let tracking_clientside_prediction = match &settings.headset.controllers {
         Switch::Enabled(controllers) => controllers.clientside_prediction,
@@ -529,10 +505,10 @@ async fn connection_pipeline(
                 while let Ok(mut data) = legacy_receive_data_receiver.recv() {
                     // Send again IDR packet every 2s in case it is missed
                     // (due to dropped burst of packets at the start of the stream or otherwise).
-                    if !crate::IDR_PARSED.load(Ordering::Relaxed) {
+                    if !IDR_PARSED.load(Ordering::Relaxed) {
                         if let Some(deadline) = idr_request_deadline {
                             if deadline < Instant::now() {
-                                crate::IDR_REQUEST_NOTIFIER.notify_waiters();
+                                IDR_REQUEST_NOTIFIER.notify_waiters();
                                 idr_request_deadline = None;
                             }
                         } else {
@@ -643,7 +619,7 @@ async fn connection_pipeline(
     let control_loop = async move {
         loop {
             tokio::select! {
-                _ = crate::IDR_REQUEST_NOTIFIER.notified() => {
+                _ = IDR_REQUEST_NOTIFIER.notified() => {
                     control_sender.lock().await.send(&ClientControlPacket::RequestIdr).await?;
                 }
                 control_packet = control_receiver.recv() =>

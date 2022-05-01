@@ -5,15 +5,9 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.res.AssetManager;
 import android.net.Uri;
-import android.opengl.EGL14;
-import android.opengl.EGLContext;
 import android.os.BatteryManager;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.HandlerThread;
-import android.os.Looper;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -21,8 +15,6 @@ import android.view.Window;
 import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
-
-import java.util.concurrent.Semaphore;
 
 public class OvrActivity extends Activity {
     static {
@@ -60,16 +52,10 @@ public class OvrActivity extends Activity {
     };
 
     boolean mResumed = false;
-    Handler mRenderingHandler;
-    HandlerThread mRenderingHandlerThread;
+    Thread mRenderingThread;
     Surface mScreenSurface;
     DecoderThread mDecoderThread = null;
-    float mRefreshRate = 60f;
     String mDashboardURL = null;
-    int mStreamSurfaceHandle;
-
-    // Cache method references for performance reasons
-    final Runnable mRenderRunnable = this::render;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,15 +68,17 @@ public class OvrActivity extends Activity {
         setContentView(R.layout.activity_main);
         SurfaceView surfaceView = findViewById(R.id.surfaceview);
 
-        mRenderingHandlerThread = new HandlerThread("Rendering thread");
-        mRenderingHandlerThread.start();
-        mRenderingHandler = new Handler(mRenderingHandlerThread.getLooper());
-        mRenderingHandler.post(this::initializeNative);
-
         SurfaceHolder holder = surfaceView.getHolder();
         holder.addCallback(new RenderingCallbacks());
 
         this.registerReceiver(this.mBatInfoReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+
+        mRenderingThread = new Thread(new Runnable() {
+            public void run() {
+                entryPointNative();
+            }
+        });
+        mRenderingThread.start();
     }
 
     @Override
@@ -103,13 +91,9 @@ public class OvrActivity extends Activity {
 
     void maybeResume() {
         if (mResumed && mScreenSurface != null) {
-            mRenderingHandler.post(() -> {
-                mDecoderThread = new DecoderThread();
-                onResumeNative(mScreenSurface, mDecoderThread);
+            mDecoderThread = new DecoderThread();
 
-                // bootstrap the rendering loop
-                mRenderingHandler.post(mRenderRunnable);
-            });
+            onResumeNative(mScreenSurface, mDecoderThread);
         }
     }
 
@@ -125,72 +109,58 @@ public class OvrActivity extends Activity {
         // the check (mResumed && mScreenSurface != null) is intended: either mResumed or
         // mScreenSurface != null will be false after this method returns.
         if (mResumed && mScreenSurface != null) {
-            mRenderingHandler.post(() -> {
-                onPauseNative();
-            });
+            lifecycleEventNative(2);
         }
     }
 
     @Override
     protected void onDestroy() {
+        lifecycleEventNative(3);
+
+        try {
+            mRenderingThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
         super.onDestroy();
-        Semaphore sem = new Semaphore(1);
-        try {
-            sem.acquire();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        mRenderingHandler.post(() -> {
-            Utils.logi(TAG, () -> "Destroying vrapi state.");
-            destroyNative();
-            sem.release();
-        });
-        mRenderingHandlerThread.quitSafely();
-        try {
-            // Wait until destroyNative() is finished. Can't use Thread.join here, because
-            // the posted lambda might not run, so wait on an object instead.
-            sem.acquire();
-            sem.release();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
     }
 
-    private void render() {
-        if (mResumed && mScreenSurface != null) {
-            if (isConnectedNative()) {
-                renderNative();
+    // private void render() {
+    //     if (mResumed && mScreenSurface != null) {
+    //         if (isConnectedNative()) {
+    //             renderNative();
 
-                mRenderingHandler.removeCallbacks(mRenderRunnable);
-                mRenderingHandler.postDelayed(mRenderRunnable, 1);
-            } else {
-                renderLoadingNative();
-                mRenderingHandler.removeCallbacks(mRenderRunnable);
-                mRenderingHandler.postDelayed(mRenderRunnable, (long) (1f / mRefreshRate));
-            }
-        }
-    }
+    //             mRenderingHandler.removeCallbacks(mRenderRunnable);
+    //             mRenderingHandler.postDelayed(mRenderRunnable, 1);
+    //         } else {
+    //             renderLoadingNative();
+    //             mRenderingHandler.removeCallbacks(mRenderRunnable);
+    //             mRenderingHandler.postDelayed(mRenderRunnable, (long) (1f / mRefreshRate));
+    //         }
+    //     }
+    // }
 
-    native void initializeNative();
+    native void entryPointNative();
 
-    native void destroyNative();
+    native void lifecycleEventNative(int event);
+
+    // native void destroyNative();
 
     // nal_class is needed to access NAL objects fields in native code without access to a Java thread
     native void onResumeNative(Surface screenSurface, DecoderThread decoder);
 
-    native void onPauseNative();
+    // native void onPauseNative();
 
-    native void renderNative();
+    // native void renderNative();
 
-    native void renderLoadingNative();
+    // native void renderLoadingNative();
 
-    native void onStreamStartNative(int codec, boolean realtimeDecoder);
+    // native void onStreamStartNative(int codec, boolean realtimeDecoder);
 
     native void onBatteryChangedNative(int battery, int plugged);
 
-    native boolean isConnectedNative();
-
-    native void requestIDR();
+    // native boolean isConnectedNative();
 
     @SuppressWarnings("unused")
     public void openDashboard() {
@@ -200,18 +170,18 @@ public class OvrActivity extends Activity {
         }
     }
 
-    @SuppressWarnings("unused")
-    public void onServerConnected(float fps, int codec, boolean realtimeDecoder, String dashboardURL) {
-        mRefreshRate = fps;
-        mDashboardURL = dashboardURL;
-        mRenderingHandler.post(() -> {
-            onStreamStartNative(codec, realtimeDecoder);
-        });
-    }
+    // @SuppressWarnings("unused")
+    // public void onServerConnected(float fps, int codec, boolean realtimeDecoder, String dashboardURL) {
+    //     mRefreshRate = fps;
+    //     mDashboardURL = dashboardURL;
+    //     mRenderingHandler.post(() -> {
+    //         onStreamStartNative(codec, realtimeDecoder);
+    //     });
+    // }
 
-    @SuppressWarnings("unused")
-    public void restartRenderCycle() {
-        mRenderingHandler.removeCallbacks(mRenderRunnable);
-        mRenderingHandler.post(mRenderRunnable);
-    }
+    // @SuppressWarnings("unused")
+    // public void restartRenderCycle() {
+    //     mRenderingHandler.removeCallbacks(mRenderRunnable);
+    //     mRenderingHandler.post(mRenderRunnable);
+    // }
 }
