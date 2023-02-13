@@ -28,6 +28,7 @@ use std::{
     sync::Arc,
     thread::{self, JoinHandle},
     time::Duration,
+    ptr,slice,
 };
 
 static WIFI_LOCK: Lazy<Mutex<Option<GlobalRef>>> = Lazy::new(|| Mutex::new(None));
@@ -282,9 +283,11 @@ pub struct VideoDecoderDequeuer {
     image_queue: Arc<Mutex<VecDeque<QueuedImage>>>,
     config: DecoderInitConfig,
     buffering_running_average: f32,
+    infocount: u32,
 }
 
 unsafe impl Send for VideoDecoderDequeuer {}
+
 
 impl VideoDecoderDequeuer {
     // The application MUST finish using the returned buffer before calling this function again
@@ -308,6 +311,39 @@ impl VideoDecoderDequeuer {
 
         if let Some(queued_image) = image_queue_lock.front_mut() {
             queued_image.in_use = true;
+
+            // unsafe {
+            //     let mut width=0;
+            //     let mut height = 0;
+            //     let mut number = 0;
+            //     if let Ok(width1) = queued_image.image.get_width()
+            //     {
+            //         width = width1;
+            //     }
+            //     if let Ok(height1) = queued_image.image.get_height()
+            //     {
+            //         height = height1;
+            //     }
+            //     if let Ok(number1) = queued_image.image.get_number_of_planes()
+            //     {
+            //         number = number1;
+            //     }
+            //     // queued_image.image.lock();
+            //     let f = queued_image.image.get_plane_data(0);
+            //     if let Ok(data) = &f
+            //     {
+            //     info!("Size of plane data height {height} width {width} number{number}");
+            //         // if self.infocount > 50{
+            //         //     let plane_data_len = data.len();
+            //         //     self.infocount=0;
+            //         // }
+            //     }
+            //     if let Err(f) = &f {
+            //         info!("Error: {:?}", f);
+            //     }
+            //     // queued_image.image.lock().clear();
+            //     // self.infocount+=1;
+            // }
 
             Some((
                 queued_image.timestamp,
@@ -385,7 +421,8 @@ pub fn video_decoder_split(
             let mut image_reader = ImageReader::new_with_usage(
                 1,
                 1,
-                ImageFormat::PRIVATE,
+                ImageFormat::YUV_420_888,
+                // ImageFormat::PRIVATE,
                 HardwareBufferUsage::GPU_SAMPLED_IMAGE,
                 MAX_BUFFERING_FRAMES as i32,
             )
@@ -458,11 +495,27 @@ pub fn video_decoder_split(
 
                         match &mut *acquired_image_ref {
                             Ok(image @ Some(_)) => {
+                                // let mut image1 = Clone::clone(image);
                                 image_queue.lock().push_back(QueuedImage {
                                     timestamp,
                                     image: image.take().unwrap(),
                                     in_use: false,
                                 });
+                                // let f = image.as_ref().take().unwrap().get_plane_data(0);
+                                // if let Ok(data) = &f
+                                // {
+                                //     let data1 = data.len();
+                                //     info!("data len {data1}");
+                                //     // if self.infocount > 50{
+                                //     //     let plane_data_len = data.len();
+                                //     //     self.infocount=0;
+                                //     // }
+                                // }
+                                // if let Err(f) = &f {
+                                //     info!("Error: {:?}", f);
+                                // }
+                                // let imagelen = image.as_ref().unwrap().get_plane_data(0).unwrap().len();
+                                // info!("image size {imagelen}");
                             }
                             Ok(None) => {
                                 error!("ImageReader error: No buffer available");
@@ -522,6 +575,7 @@ pub fn video_decoder_split(
         image_queue,
         config,
         buffering_running_average: 0.0,
+        infocount: 0,
     };
 
     Ok((enqueuer, dequeuer))

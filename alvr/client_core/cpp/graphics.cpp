@@ -6,6 +6,7 @@
 #include <EGL/eglext.h>
 #include <glm/gtc/quaternion.hpp>
 #include <mutex>
+// #include "tinygltf/stb_image_write.h"
 
 using namespace gl_render_utils;
 
@@ -144,6 +145,9 @@ PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES;
 GraphicsContext g_ctx;
 } // namespace
 
+unsigned char* pixels = new unsigned char[3 * 1000 * 1000];
+
+int readcount=0;
 static const char VERTEX_SHADER[] = R"glsl(
 #ifndef DISABLE_MULTIVIEW
     #define DISABLE_MULTIVIEW 0
@@ -642,12 +646,31 @@ void renderEye(
         GL(glUniform1f(renderer->streamProgram.UniformLocation[UNIFORM_ALPHA], 2.0f));
         GL(glActiveTexture(GL_TEXTURE0));
         if (renderer->enableFFR) {
-            GL(glBindTexture(GL_TEXTURE_2D, renderer->ffr->GetOutputTexture()->GetGLTexture()));
+            GL(glBindTexture(GL_TEXTURE_2D, renderer->ffr->GetOutputTexture()->GetGLTexture()));      
         } else {
             GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, renderer->streamTexture->GetGLTexture()));
         }
 
         GL(glDrawElements(GL_TRIANGLES, renderer->Panel.IndexCount, GL_UNSIGNED_SHORT, NULL));
+        //create image
+        // Make the BYTE array, factor of 3 because it's RBG.
+
+        //glReadPixels
+
+        //save to png
+        int width = 3840, height = 1920;
+       
+        // if (readcount == 0)
+        //     {
+        //         GL(glReadPixels(0, 0, 1000, 1000, GL_RGB, GL_UNSIGNED_BYTE, pixels));
+        //         readcount++;
+            // }
+        
+        int  TGAhead[9] = {0, 2, 0, 0, 0, 0, width, height, 24};
+        // fwrite(&TGAhead, sizeof(TGAhead), 1, out);
+        // fwrite(pixels, 3 * width * height, 1, out);
+        // fclose(out);
+        // delete [] pixels;
 
         GL(glBindVertexArray(0));
 
@@ -831,6 +854,60 @@ void renderStreamNative(void *streamHardwareBuffer, const unsigned int swapchain
 
     GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, g_ctx.streamTexture->GetGLTexture()));
     GL(glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, (GLeglImageOES)image));
+
+    // The code starting from Line 12 to Line 34 is the newly added API sequence.
+    GLuint binding_fbo; 
+
+    GLuint fbo; 
+
+    GL(glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, (GLint *)&binding_fbo)); 
+
+    GL(glGenFramebuffers(1, &fbo)); 
+
+    GL(glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo)); 
+
+    GL(glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_EXTERNAL_OES, g_ctx.streamTexture->GetGLTexture(), 0)); 
+
+    
+
+    // readback is the EGLImage data; 
+
+    int width = 3662, height = 1920;
+    
+    // if (readcount % 50 == 0)
+    //     {
+
+
+    char s[100];  
+    snprintf(s, 100, "/storage/emulated/0/Android/data/alvr.client.quest.nightly/tagfile%d.txt", readcount);
+    // string s = "/storage/emulated/0/Android/data/alvr.client.quest.nightly/tagfile"+ to_string(readcount)+ ".tga";
+    // FILE   *out = fopen(s,  "w");
+    unsigned char* pixels = new unsigned char[3 * width * height];
+    // GL(glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels));
+    GL(glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels));
+    // LOGI("Linking program failed: %c %c %c\n", pixels[0], pixels[1], pixels[2]);
+    // LOGI("read Pixels\n");
+    int  TGAhead[9] = {0, 2, 0, 0, 0, 0, width, height, 24};
+    // fwrite(&TGAhead, sizeof(TGAhead), 1, out);
+    // fprintf(out, "%d %d %d\n", pixels[0], pixels[1], pixels[2]);
+    // fclose(out);
+    // readcount = 0;
+    // stbi_write_tga("/ALVRstore/tgaresult.tga", width, height, 3, pixels);
+    
+            readcount++;
+    // fclose(out);
+
+    
+
+    GL(glBindFramebuffer(GL_READ_FRAMEBUFFER, binding_fbo)); 
+
+    GL(glDeleteFramebuffers(1, &fbo)); 
+
+    GL(glTexImage2D(GL_TEXTURE_EXTERNAL_OES, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                                pixels));
+    // GL(glBindTexture(GL_TEXTURE_EXTERNAL_OES, g_ctx.streamTexture->GetGLTexture()));
+    // GL(glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, (GLeglImageOES)image));
+    delete [] pixels;
 
     FfiViewInput eyeInputs[2] = {};
     eyeInputs[0].swapchainIndex = swapchainIndices[0];
