@@ -56,7 +56,6 @@ class VideoEncoderVCE : public VideoEncoder
 {
 public:
 	VideoEncoderVCE(std::shared_ptr<CD3DRender> pD3DRender
-		, std::shared_ptr<ClientConnection> listener
 		, int width, int height);
 	~VideoEncoderVCE();
 
@@ -85,7 +84,6 @@ private:
 	std::ofstream fpOut;
 
 	std::shared_ptr<CD3DRender> m_d3dRender;
-	std::shared_ptr<ClientConnection> m_Listener;
 
 	bool m_use10bit;
 	amf::AMF_SURFACE_FORMAT m_surfaceFormat;
@@ -96,14 +94,8 @@ private:
 	int m_renderHeight;
 	int m_bitrateInMBits;
 
-	char *m_audByteSequence;
-	int m_audNalSize;
-	int m_audHeaderSize;
-
 	bool m_hasQueryTimeout;
 
 	void ApplyFrameProperties(const amf::AMFSurfacePtr &surface, bool insertIDR);
-	void SkipAUD(char **buffer, int *length);
-	void LoadAUDByteSequence();
 };
 

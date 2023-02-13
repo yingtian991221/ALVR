@@ -110,7 +110,7 @@ dependencies = [
 
 [[package]]
 name = "alvr_audio"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alvr_common",
  "alvr_session",
@@ -120,12 +120,12 @@ dependencies = [
  "serde",
  "tokio",
  "widestring 1.0.2",
- "windows 0.43.0",
+ "windows 0.44.0",
 ]
 
 [[package]]
 name = "alvr_client_core"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alvr_audio",
  "alvr_common",
@@ -138,12 +138,12 @@ dependencies = [
  "bindgen 0.63.0",
  "bytes",
  "cc",
- "env_logger 0.10.0",
+ "env_logger",
  "futures",
  "glyph_brush_layout",
  "jni 0.20.0",
  "local-ip-address",
- "ndk 0.7.0 (git+https://github.com/zarik5/android-ndk-rs?rev=f1d38a0)",
+ "ndk 0.7.0 (git+https://github.com/zarik5/android-ndk-rs?rev=dea742a)",
  "ndk-context",
  "ndk-sys 0.4.0",
  "oboe",
@@ -156,8 +156,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "alvr_client_openxr"
+version = "20.0.0-dev07"
+dependencies = [
+ "alvr_client_core",
+ "alvr_common",
+ "alvr_events",
+ "alvr_session",
+ "alvr_sockets",
+ "android-activity",
+ "glow 0.12.0",
+ "jni 0.20.0",
+ "khronos-egl",
+ "libc",
+ "ndk-context",
+ "openxr",
+]
+
+[[package]]
 name = "alvr_commands"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alvr_common",
  "alvr_filesystem",
@@ -170,7 +188,7 @@ dependencies = [
 
 [[package]]
 name = "alvr_common"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "glam",
  "log",
@@ -183,7 +201,7 @@ dependencies = [
 
 [[package]]
 name = "alvr_dashboard"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alvr_commands",
  "alvr_common",
@@ -193,7 +211,7 @@ dependencies = [
  "bincode",
  "eframe",
  "egui",
- "env_logger 0.10.0",
+ "env_logger",
  "fluent",
  "fluent-langneg",
  "fluent-syntax",
@@ -213,7 +231,7 @@ dependencies = [
 
 [[package]]
 name = "alvr_events"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alvr_common",
  "alvr_session",
@@ -223,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "alvr_filesystem"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "dirs",
  "once_cell",
@@ -231,13 +249,13 @@ dependencies = [
 
 [[package]]
 name = "alvr_launcher"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alvr_commands",
  "alvr_common",
  "alvr_filesystem",
  "eframe",
- "env_logger 0.10.0",
+ "env_logger",
  "serde_json",
  "single-instance",
  "sysinfo",
@@ -247,7 +265,7 @@ dependencies = [
 
 [[package]]
 name = "alvr_server"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alcro",
  "alvr_audio",
@@ -284,7 +302,7 @@ dependencies = [
 
 [[package]]
 name = "alvr_server_data"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alvr_common",
  "alvr_events",
@@ -294,12 +312,12 @@ dependencies = [
  "rhai",
  "serde_json",
  "tokio",
- "wgpu",
+ "wgpu 0.15.1",
 ]
 
 [[package]]
 name = "alvr_session"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alvr_common",
  "bytemuck",
@@ -311,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "alvr_sockets"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alvr_common",
  "alvr_events",
@@ -327,14 +345,14 @@ dependencies = [
 
 [[package]]
 name = "alvr_vrcompositor_wrapper"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "exec",
 ]
 
 [[package]]
 name = "alvr_vulkan_layer"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alvr_filesystem",
  "bindgen 0.63.0",
@@ -345,13 +363,36 @@ dependencies = [
 
 [[package]]
 name = "alvr_xtask"
-version = "20.0.0-dev06"
+version = "20.0.0-dev07"
 dependencies = [
  "alvr_filesystem",
  "pico-args",
  "pkg-config",
  "xshell",
 ]
+
+[[package]]
+name = "android-activity"
+version = "0.4.0"
+source = "git+https://github.com/zarik5/android-activity#1f073762184f70d87906a561b0005d8536a3830a"
+dependencies = [
+ "android-properties",
+ "bitflags",
+ "cc",
+ "jni-sys",
+ "libc",
+ "log",
+ "ndk 0.7.0 (git+https://github.com/zarik5/android-ndk-rs?rev=dea742a)",
+ "ndk-context",
+ "ndk-sys 0.4.0+25.0.8775105",
+ "num_enum",
+]
+
+[[package]]
+name = "android-properties"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc7eb209b1518d6bb87b283c20095f5228ecda460da70b44f0802523dea6da04"
 
 [[package]]
 name = "android_log-sys"
@@ -361,12 +402,12 @@ checksum = "85965b6739a430150bdd138e2374a98af0c3ee0d030b3bb7fc3bddff58d0102e"
 
 [[package]]
 name = "android_logger"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5e9dd62f37dea550caf48c77591dc50bd1a378ce08855be1a0c42a97b7550fb"
+checksum = "037f3e1da32ddba7770530e69258b742c15ad67bdf90e5f6b35f4b6db9a60eb7"
 dependencies = [
  "android_log-sys",
- "env_logger 0.9.3",
+ "env_logger",
  "log",
  "once_cell",
 ]
@@ -816,6 +857,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "com-rs"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf43edc576402991846b093a7ca18a3477e0ef9c588cde84964b5d3e43016642"
+
+[[package]]
 name = "combine"
 version = "4.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1082,6 +1129,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "d3d12"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8f0de2f5a8e7bd4a9eec0e3c781992a4ce1724f68aec7d7a3715344de8b39da"
+dependencies = [
+ "bitflags",
+ "libloading",
+ "winapi",
+]
+
+[[package]]
 name = "darling"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1260,7 +1318,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "wgpu",
+ "wgpu 0.14.2",
  "winit",
 ]
 
@@ -1287,7 +1345,7 @@ dependencies = [
  "pollster",
  "tracing",
  "type-map 0.5.0",
- "wgpu",
+ "wgpu 0.14.2",
  "winit",
 ]
 
@@ -1337,16 +1395,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1cc3c5651fb62ab8aa3103998dade57efdd028544bd300516baa31840c252a83"
 dependencies = [
  "encoding_rs",
-]
-
-[[package]]
-name = "env_logger"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a12e6657c4c97ebab115a42dcee77225f7f482cdd841cf7088c657a42e9e00e7"
-dependencies = [
- "log",
- "regex",
 ]
 
 [[package]]
@@ -1896,6 +1944,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "glow"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8edf6019dff2d92ad27c1e3ff82ad50a0aea5b01370353cc928bfdc33e95925c"
+dependencies = [
+ "js-sys",
+ "slotmap",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "glyph_brush_layout"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1934,6 +1994,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54804d0d6bc9d7f26db4eaec1ad10def69b599315f487d32c334a80d1efe67a5"
 dependencies = [
  "bitflags",
+]
+
+[[package]]
+name = "gpu-allocator"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce95f9e2e11c2c6fadfce42b5af60005db06576f231f5c92550fdded43c423e8"
+dependencies = [
+ "backtrace",
+ "log",
+ "thiserror",
+ "winapi",
+ "windows 0.44.0",
 ]
 
 [[package]]
@@ -2037,6 +2110,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
  "ahash 0.7.6",
+]
+
+[[package]]
+name = "hassle-rs"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90601c6189668c7345fc53842cb3f3a3d872203d523be1b3cb44a36a3e62fb85"
+dependencies = [
+ "bitflags",
+ "com-rs",
+ "libc",
+ "libloading",
+ "thiserror",
+ "widestring 0.5.1",
+ "winapi",
 ]
 
 [[package]]
@@ -2365,9 +2453,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.60"
+version = "0.3.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49409df3e3bf0856b916e2ceaca09ee28e6871cf7d9ce97a692cacfdb2a25a47"
+checksum = "445dde2150c55e483f3d8416706b97ec8e8237c307e5b7b4b8dd15e6af2a0730"
 dependencies = [
  "wasm-bindgen",
 ]
@@ -2625,6 +2713,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "naga"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5eafe22a23b797c9bc227c6c896419b26b5bb88fa903417a3adaed08778850d5"
+dependencies = [
+ "bit-set",
+ "bitflags",
+ "codespan-reporting",
+ "hexf-parse",
+ "indexmap",
+ "log",
+ "num-traits",
+ "rustc-hash",
+ "spirv",
+ "termcolor",
+ "thiserror",
+ "unicode-xid 0.2.4",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2672,11 +2780,11 @@ dependencies = [
 [[package]]
 name = "ndk"
 version = "0.7.0"
-source = "git+https://github.com/zarik5/android-ndk-rs?rev=f1d38a0#f1d38a07468c0aecdb325593f2467040e94657d7"
+source = "git+https://github.com/zarik5/android-ndk-rs?rev=dea742a#dea742a27396ee2bd3b297a27675eda2758dcd01"
 dependencies = [
  "bitflags",
  "jni-sys",
- "ndk-sys 0.4.0",
+ "ndk-sys 0.4.0+25.0.8775105",
  "num_enum",
  "raw-window-handle 0.5.0",
  "thiserror",
@@ -2730,6 +2838,14 @@ dependencies = [
 name = "ndk-sys"
 version = "0.4.0"
 source = "git+https://github.com/zarik5/android-ndk-rs?rev=f1d38a0#f1d38a07468c0aecdb325593f2467040e94657d7"
+dependencies = [
+ "jni-sys",
+]
+
+[[package]]
+name = "ndk-sys"
+version = "0.4.0+25.0.8775105"
+source = "git+https://github.com/zarik5/android-ndk-rs?rev=dea742a#dea742a27396ee2bd3b297a27675eda2758dcd01"
 dependencies = [
  "jni-sys",
 ]
@@ -3006,6 +3122,25 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "openxr"
+version = "0.17.1"
+source = "git+https://github.com/Ralith/openxrs#e5fe4164216fcc16189c52ea58e639e85e8e2d6b"
+dependencies = [
+ "libc",
+ "libloading",
+ "ndk-context",
+ "openxr-sys",
+]
+
+[[package]]
+name = "openxr-sys"
+version = "0.9.3"
+source = "git+https://github.com/Ralith/openxrs#e5fe4164216fcc16189c52ea58e639e85e8e2d6b"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -4402,9 +4537,9 @@ checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.83"
+version = "0.2.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaf9f5aceeec8be17c128b2e93e031fb8a4d469bb9c4ae2d7dc1888b26887268"
+checksum = "31f8dcbc21f30d9b8f2ea926ecb58f6b91192c17e9d33594b3df58b2007ca53b"
 dependencies = [
  "cfg-if",
  "wasm-bindgen-macro",
@@ -4412,9 +4547,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-backend"
-version = "0.2.83"
+version = "0.2.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c8ffb332579b0557b52d268b91feab8df3615f265d5270fec2a8c95b17c1142"
+checksum = "95ce90fd5bcc06af55a641a86428ee4229e44e07033963a2290a8e241607ccb9"
 dependencies = [
  "bumpalo",
  "log",
@@ -4427,9 +4562,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.33"
+version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23639446165ca5a5de86ae1d8896b737ae80319560fbaa4c2887b7da6e7ebd7d"
+checksum = "f219e0d211ba40266969f6dbdd90636da12f75bee4fc9d6c23d1260dadb51454"
 dependencies = [
  "cfg-if",
  "js-sys",
@@ -4439,9 +4574,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.83"
+version = "0.2.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "052be0f94026e6cbc75cdefc9bae13fd6052cdcaf532fa6c45e7ae33a1e6c810"
+checksum = "4c21f77c0bedc37fd5dc21f897894a5ca01e7bb159884559461862ae90c0b4c5"
 dependencies = [
  "quote 1.0.23",
  "wasm-bindgen-macro-support",
@@ -4449,9 +4584,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.83"
+version = "0.2.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07bc0c051dc5f23e307b13285f9d75df86bfdf816c5721e573dec1f9b8aa193c"
+checksum = "2aff81306fcac3c7515ad4e177f521b5c9a15f2b08f4e32d823066102f35a5f6"
 dependencies = [
  "proc-macro2 1.0.49",
  "quote 1.0.23",
@@ -4462,9 +4597,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.83"
+version = "0.2.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c38c045535d93ec4f0b4defec448e4291638ee608530863b1e2ba115d4fff7f"
+checksum = "0046fef7e28c3804e5e38bfa31ea2a0f73905319b677e57ebe37e49358989b5d"
 
 [[package]]
 name = "wayland-client"
@@ -4541,9 +4676,9 @@ dependencies = [
 
 [[package]]
 name = "web-sys"
-version = "0.3.60"
+version = "0.3.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcda906d8be16e728fd5adc5b729afad4e444e106ab28cd1c7256e54fa61510f"
+checksum = "e33b99f4b23ba3eec1a53ac264e35a755f00e966e0065077d6027c0f575b0b97"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -4576,7 +4711,7 @@ dependencies = [
  "arrayvec 0.7.2",
  "js-sys",
  "log",
- "naga",
+ "naga 0.10.0",
  "parking_lot",
  "raw-window-handle 0.5.0",
  "smallvec",
@@ -4584,9 +4719,33 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "wgpu-core",
- "wgpu-hal",
- "wgpu-types",
+ "wgpu-core 0.14.2",
+ "wgpu-hal 0.14.1",
+ "wgpu-types 0.14.1",
+]
+
+[[package]]
+name = "wgpu"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d745a1b6d91d85c33defbb29f0eee0450e1d2614d987e14bf6baf26009d132d7"
+dependencies = [
+ "arrayvec 0.7.2",
+ "cfg-if",
+ "js-sys",
+ "log",
+ "naga 0.11.0",
+ "parking_lot",
+ "profiling",
+ "raw-window-handle 0.5.0",
+ "smallvec",
+ "static_assertions",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "wgpu-core 0.15.1",
+ "wgpu-hal 0.15.2",
+ "wgpu-types 0.15.1",
 ]
 
 [[package]]
@@ -4602,15 +4761,38 @@ dependencies = [
  "codespan-reporting",
  "fxhash",
  "log",
- "naga",
+ "naga 0.10.0",
  "parking_lot",
  "profiling",
  "raw-window-handle 0.5.0",
  "smallvec",
  "thiserror",
  "web-sys",
- "wgpu-hal",
- "wgpu-types",
+ "wgpu-hal 0.14.1",
+ "wgpu-types 0.14.1",
+]
+
+[[package]]
+name = "wgpu-core"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7131408d940e335792645a98f03639573b0480e9e2e7cddbbab74f7c6d9f3fff"
+dependencies = [
+ "arrayvec 0.7.2",
+ "bit-vec",
+ "bitflags",
+ "codespan-reporting",
+ "fxhash",
+ "log",
+ "naga 0.11.0",
+ "parking_lot",
+ "profiling",
+ "raw-window-handle 0.5.0",
+ "smallvec",
+ "thiserror",
+ "web-sys",
+ "wgpu-hal 0.15.2",
+ "wgpu-types 0.15.1",
 ]
 
 [[package]]
@@ -4626,10 +4808,10 @@ dependencies = [
  "bitflags",
  "block",
  "core-graphics-types",
- "d3d12",
+ "d3d12 0.5.0",
  "foreign-types 0.3.2",
  "fxhash",
- "glow",
+ "glow 0.11.2",
  "gpu-alloc",
  "gpu-descriptor",
  "js-sys",
@@ -4637,7 +4819,7 @@ dependencies = [
  "libloading",
  "log",
  "metal",
- "naga",
+ "naga 0.10.0",
  "objc",
  "parking_lot",
  "profiling",
@@ -4648,7 +4830,49 @@ dependencies = [
  "thiserror",
  "wasm-bindgen",
  "web-sys",
- "wgpu-types",
+ "wgpu-types 0.14.1",
+ "winapi",
+]
+
+[[package]]
+name = "wgpu-hal"
+version = "0.15.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37a7816f00690eca4540579ad861ee9b646d938b467ce83caa5ffb8b1d8180f6"
+dependencies = [
+ "android_system_properties",
+ "arrayvec 0.7.2",
+ "ash",
+ "bit-set",
+ "bitflags",
+ "block",
+ "core-graphics-types",
+ "d3d12 0.6.0",
+ "foreign-types 0.3.2",
+ "fxhash",
+ "glow 0.12.0",
+ "gpu-alloc",
+ "gpu-allocator",
+ "gpu-descriptor",
+ "hassle-rs",
+ "js-sys",
+ "khronos-egl",
+ "libc",
+ "libloading",
+ "log",
+ "metal",
+ "naga 0.11.0",
+ "objc",
+ "parking_lot",
+ "profiling",
+ "range-alloc",
+ "raw-window-handle 0.5.0",
+ "renderdoc-sys",
+ "smallvec",
+ "thiserror",
+ "wasm-bindgen",
+ "web-sys",
+ "wgpu-types 0.15.1",
  "winapi",
 ]
 
@@ -4659,6 +4883,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb6b28ef22cac17b9109b25b3bf8c9a103eeb293d7c5f78653979b09140375f6"
 dependencies = [
  "bitflags",
+]
+
+[[package]]
+name = "wgpu-types"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a321d5436275e62be2d1ebb87991486fb3a561823656beb5410571500972cc65"
+dependencies = [
+ "bitflags",
+ "js-sys",
+ "web-sys",
 ]
 
 [[package]]
@@ -4687,6 +4922,12 @@ name = "widestring"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c168940144dd21fd8046987c16a46a33d5fc84eec29ef9dcddc2ac9e31526b7c"
+
+[[package]]
+name = "widestring"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17882f045410753661207383517a6f62ec3dbeb6a4ed2acce01f0728238d1983"
 
 [[package]]
 name = "widestring"
@@ -4763,6 +5004,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows"
+version = "0.44.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e745dab35a0c4c77aa3ce42d595e13d2003d6902d6b08c9ef5fc326d08da12b"
+dependencies = [
+ "windows-targets",
+]
+
+[[package]]
 name = "windows-sys"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4780,6 +5030,21 @@ name = "windows-sys"
 version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a3e1820f08b8513f676f7ab6c1f99ff312fb97b553d30ff4dd86f9f15728aa7"
+dependencies = [
+ "windows_aarch64_gnullvm",
+ "windows_aarch64_msvc 0.42.1",
+ "windows_i686_gnu 0.42.1",
+ "windows_i686_msvc 0.42.1",
+ "windows_x86_64_gnu 0.42.1",
+ "windows_x86_64_gnullvm",
+ "windows_x86_64_msvc 0.42.1",
+]
+
+[[package]]
+name = "windows-targets"
+version = "0.42.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e2522491fbfcd58cc84d47aeb2958948c4b8982e9a2d8a2a35bbaed431390e7"
 dependencies = [
  "windows_aarch64_gnullvm",
  "windows_aarch64_msvc 0.42.1",

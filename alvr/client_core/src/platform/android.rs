@@ -104,14 +104,28 @@ pub fn device_model() -> String {
     let vm = vm();
     let env = vm.attach_current_thread().unwrap();
 
-    let jdevice_name = env
+    let jname = env
         .get_static_field("android/os/Build", "MODEL", "Ljava/lang/String;")
         .unwrap()
         .l()
         .unwrap();
-    let device_name_raw = env.get_string(jdevice_name.into()).unwrap();
+    let name_raw = env.get_string(jname.into()).unwrap();
 
-    device_name_raw.to_string_lossy().as_ref().to_owned()
+    name_raw.to_string_lossy().as_ref().to_owned()
+}
+
+pub fn manufacturer_name() -> String {
+    let vm = vm();
+    let env = vm.attach_current_thread().unwrap();
+
+    let jname = env
+        .get_static_field("android/os/Build", "MANUFACTURER", "Ljava/lang/String;")
+        .unwrap()
+        .l()
+        .unwrap();
+    let name_raw = env.get_string(jname.into()).unwrap();
+
+    name_raw.to_string_lossy().as_ref().to_owned()
 }
 
 fn get_system_service<'a>(env: &JNIEnv<'a>, service_name: &str) -> JObject<'a> {
@@ -355,8 +369,8 @@ impl VideoDecoderDequeuer {
                     .cast(),
             ))
         } else {
-            warn!("Video frame queue underflow!");
-
+            // TODO: add back when implementing proper phase sync
+            //warn!("Video frame queue underflow!");
             None
         }
     }
@@ -415,9 +429,6 @@ pub fn video_decoder_split(
                 }
             }
 
-            let acquired_image = Arc::new(Mutex::new(Ok(None)));
-            let image_acquired_notifier = Arc::new(Condvar::new());
-
             let mut image_reader = ImageReader::new_with_usage(
                 1,
                 1,
@@ -430,12 +441,40 @@ pub fn video_decoder_split(
 
             image_reader
                 .set_image_listener(Box::new({
-                    let acquired_image = Arc::clone(&acquired_image);
-                    let image_acquired_notifier = Arc::clone(&image_acquired_notifier);
+                    let image_queue = Arc::clone(&image_queue);
                     move |image_reader| {
-                        let mut acquired_image_lock = acquired_image.lock();
-                        *acquired_image_lock = image_reader.acquire_next_image();
-                        image_acquired_notifier.notify_one();
+                        let mut image_queue_lock = image_queue.lock();
+
+                        if image_queue_lock.len() > available_buffering_frames {
+                            warn!("Video frame queue overflow!");
+                            image_queue_lock.pop_front();
+                        }
+
+                        match &mut image_reader.acquire_next_image() {
+                            Ok(image @ Some(_)) => {
+                                let image = image.take().unwrap();
+                                let timestamp =
+                                    Duration::from_nanos(image.get_timestamp().unwrap() as u64);
+
+                                dequeued_frame_callback(timestamp);
+
+                                image_queue_lock.push_back(QueuedImage {
+                                    timestamp,
+                                    image,
+                                    in_use: false,
+                                });
+                            }
+                            Ok(None) => {
+                                error!("ImageReader error: No buffer available");
+
+                                image_queue_lock.clear();
+                            }
+                            Err(e) => {
+                                error!("ImageReader error: {e}");
+
+                                image_queue_lock.clear();
+                            }
+                        }
                     }
                 }))
                 .unwrap();
@@ -467,22 +506,14 @@ pub fn video_decoder_split(
             }
 
             while running.value() {
-                if image_queue.lock().len() > available_buffering_frames {
-                    warn!("Video frame queue overflow!");
-
-                    image_queue.lock().clear();
-
-                    continue;
-                }
-
-                let mut acquired_image_ref = acquired_image.lock();
-
                 match decoder.dequeue_output_buffer(Duration::from_millis(1)) {
                     MediaCodecResult::Ok(buffer) => {
                         // The buffer timestamp is actually nanoseconds
-                        let timestamp = Duration::from_nanos(buffer.presentation_time_us() as _);
+                        let presentation_time_ns = buffer.presentation_time_us();
 
-                        if let Err(e) = decoder.release_output_buffer(buffer, true) {
+                        if let Err(e) =
+                            decoder.release_output_buffer_at_time(buffer, presentation_time_ns)
+                        {
                             error!("Decoder dequeue error: {e}");
 
                             continue;
@@ -533,7 +564,7 @@ pub fn video_decoder_split(
                             }
                         }
                     }
-                    MediaCodecResult::Info(MediaCodecInfo::TryAgainLater) => (),
+                    MediaCodecResult::Info(MediaCodecInfo::TryAgainLater) => thread::yield_now(),
                     MediaCodecResult::Info(i) => info!("Decoder dequeue event: {i:?}"),
                     MediaCodecResult::Err(e) => {
                         error!("Decoder dequeue error: {e}");

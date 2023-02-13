@@ -427,7 +427,7 @@ pub struct ControllersDesc {
     #[schema(min = -50, max = 50, step = 1)]
     pub pose_time_offset_ms: i64,
 
-    #[schema(advanced, min = 0., max = 0.1, step = 0.001)]
+    #[schema(advanced, min = 0., max = 1.0, step = 0.001)]
     pub linear_velocity_cutoff: f32,
 
     #[schema(advanced, min = 0., max = 100., step = 1.)]
@@ -464,11 +464,23 @@ pub struct ControllersDesc {
     pub use_headset_tracking_system: bool,
 }
 
-#[derive(SettingsSchema, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Patches {
-    pub remove_sync_popup: bool,
-    pub linux_async_reprojection: bool,
+#[derive(SettingsSchema, Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase", tag = "type", content = "content")]
+pub enum PositionRecenteringMode {
+    Disabled,
+    LocalFloor,
+    #[serde(rename_all = "camelCase")]
+    Local {
+        view_height: f32,
+    },
+}
+
+#[derive(SettingsSchema, Serialize, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase", tag = "type", content = "content")]
+pub enum RotationRecenteringMode {
+    Disabled,
+    Yaw,
+    Tilted,
 }
 
 #[derive(SettingsSchema, Serialize, Deserialize, Clone)]
@@ -505,18 +517,16 @@ pub struct HeadsetDesc {
     pub registered_device_type: String,
 
     #[schema(advanced)]
-    pub position_offset: [f32; 3],
-
-    #[schema(advanced)]
-    pub force_3dof: bool,
-
-    #[schema(advanced)]
     pub tracking_ref_only: bool,
 
     #[schema(advanced)]
     pub enable_vive_tracker_proxy: bool,
 
     pub controllers: Switch<ControllersDesc>,
+
+    pub position_recentering_mode: PositionRecenteringMode,
+
+    pub rotation_recentering_mode: RotationRecenteringMode,
 
     #[schema(advanced)]
     pub extra_latency_mode: bool,
@@ -542,6 +552,13 @@ pub enum SocketBufferSize {
     Default,
     Maximum,
     Custom(u32),
+}
+
+#[derive(SettingsSchema, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DisconnectionCriteria {
+    pub latency_threshold_ms: u64,
+    pub sustain_duration_s: u64,
 }
 
 #[derive(SettingsSchema, Serialize, Deserialize, Clone)]
@@ -584,6 +601,8 @@ pub struct ConnectionDesc {
 
     #[schema(advanced)]
     pub statistics_history_size: u64,
+
+    pub disconnection_criteria: Switch<DisconnectionCriteria>,
 }
 
 #[derive(SettingsSchema, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -609,6 +628,13 @@ pub enum LogLevel {
     Warning,
     Info,
     Debug,
+}
+
+#[derive(SettingsSchema, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Patches {
+    pub remove_sync_popup: bool,
+    pub linux_async_reprojection: bool,
 }
 
 #[derive(SettingsSchema, Serialize, Deserialize, Clone)]
@@ -829,8 +855,6 @@ pub fn session_settings_default() -> SettingsDefault {
             manufacturer_name: "Oculus".into(),
             render_model_name: "generic_hmd".into(),
             registered_device_type: "oculus/1WMGH000XX0000".into(),
-            position_offset: [0., 0., 0.],
-            force_3dof: false,
             tracking_ref_only: false,
             enable_vive_tracker_proxy: false,
             controllers: SwitchDefault {
@@ -848,10 +872,10 @@ pub fn session_settings_default() -> SettingsDefault {
                     registered_device_type: "oculus/1WMGH000XX0000_Controller".into(),
                     input_profile_path: "{oculus}/input/touch_profile.json".into(),
                     pose_time_offset_ms: 20,
-                    linear_velocity_cutoff: 0.01,
+                    linear_velocity_cutoff: 0.05,
                     angular_velocity_cutoff: 10.,
-                    position_offset_left: [-0.0065, 0.002, -0.051],
-                    rotation_offset_left: [40., 0., 0.],
+                    position_offset_left: [0.0, 0.0, -0.11],
+                    rotation_offset_left: [-20.0, 0., 0.],
                     override_trigger_threshold: SwitchDefault {
                         enabled: false,
                         content: ControllersTriggerOverrideDescDefault {
@@ -871,6 +895,13 @@ pub fn session_settings_default() -> SettingsDefault {
                     haptics_low_duration_range: 0.5,
                     use_headset_tracking_system: false,
                 },
+            },
+            position_recentering_mode: PositionRecenteringModeDefault {
+                Local: PositionRecenteringModeLocalDefault { view_height: 1.5 },
+                variant: PositionRecenteringModeDefaultVariant::LocalFloor,
+            },
+            rotation_recentering_mode: RotationRecenteringModeDefault {
+                variant: RotationRecenteringModeDefaultVariant::Yaw,
             },
             extra_latency_mode: false,
         },
@@ -907,6 +938,13 @@ pub fn session_settings_default() -> SettingsDefault {
             on_disconnect_script: "".into(),
             packet_size: 1400,
             statistics_history_size: 256,
+            disconnection_criteria: SwitchDefault {
+                enabled: false,
+                content: DisconnectionCriteriaDefault {
+                    latency_threshold_ms: 150,
+                    sustain_duration_s: 3,
+                },
+            },
         },
         extra: ExtraDescDefault {
             theme: ThemeDefault {
